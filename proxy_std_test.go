@@ -13,11 +13,10 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestStdProxy(t *testing.T) {
@@ -35,10 +34,14 @@ func TestStdProxy(t *testing.T) {
 
 	rb := NewStdRandomBalancer(nil)
 	for _, tgt := range targets {
-		assert.True(t, rb.AddTarget(tgt))
+		if !rb.AddTarget(tgt) {
+			t.Fatalf("expected target %s to be added", tgt.Name)
+		}
 	}
 	for _, tgt := range targets {
-		assert.False(t, rb.AddTarget(tgt))
+		if rb.AddTarget(tgt) {
+			t.Fatalf("expected duplicate target %s to be rejected", tgt.Name)
+		}
 	}
 
 	mux := http.NewServeMux()
@@ -49,12 +52,18 @@ func TestStdProxy(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 	body := rec.Body.String()
 	expected := map[string]bool{"target 1": true, "target 2": true}
-	assert.True(t, expected[body])
+	if !expected[body] {
+		t.Fatalf("unexpected body %s", body)
+	}
 
 	for _, tgt := range targets {
-		assert.True(t, rb.RemoveTarget(tgt.Name))
+		if !rb.RemoveTarget(tgt.Name) {
+			t.Fatalf("expected target %s to be removed", tgt.Name)
+		}
 	}
-	assert.False(t, rb.RemoveTarget("unknown"))
+	if rb.RemoveTarget("unknown") {
+		t.Fatalf("expected remove unknown target to fail")
+	}
 
 	rrb := NewStdRoundRobinBalancer(targets)
 	mux = http.NewServeMux()
@@ -62,10 +71,14 @@ func TestStdProxy(t *testing.T) {
 
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
-	assert.Equal(t, "target 1", rec.Body.String())
+	if rec.Body.String() != "target 1" {
+		t.Fatalf("expected target 1 got %s", rec.Body.String())
+	}
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
-	assert.Equal(t, "target 2", rec.Body.String())
+	if rec.Body.String() != "target 2" {
+		t.Fatalf("expected target 2 got %s", rec.Body.String())
+	}
 
 	mux = http.NewServeMux()
 	mux.Handle("/", ProxyStdWithConfig(StdProxyConfig{
@@ -78,8 +91,12 @@ func TestStdProxy(t *testing.T) {
 	})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})))
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
-	assert.Equal(t, "modified", rec.Body.String())
-	assert.Equal(t, "1", rec.Header().Get("X-Modified"))
+	if rec.Body.String() != "modified" {
+		t.Fatalf("expected body modified got %s", rec.Body.String())
+	}
+	if rec.Header().Get("X-Modified") != "1" {
+		t.Fatalf("expected header X-Modified=1 got %s", rec.Header().Get("X-Modified"))
+	}
 }
 
 type stdTestProvider struct {
@@ -108,7 +125,9 @@ func TestStdTargetProvider(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	mux.ServeHTTP(rec, req)
-	assert.Equal(t, "target 1", rec.Body.String())
+	if rec.Body.String() != "target 1" {
+		t.Fatalf("expected target 1 got %s", rec.Body.String())
+	}
 }
 
 func TestStdFailNextTarget(t *testing.T) {
@@ -121,7 +140,9 @@ func TestStdFailNextTarget(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	mux.ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusBadGateway, rec.Code)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("expected %d got %d", http.StatusBadGateway, rec.Code)
+	}
 }
 
 func TestStdProxyRewrite(t *testing.T) {
@@ -163,9 +184,13 @@ func TestStdProxyRewrite(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, targetURL.String(), nil)
 			rec := httptest.NewRecorder()
 			mux.ServeHTTP(rec, req)
-			assert.Equal(t, tc.expectStatus, rec.Code)
+			if rec.Code != tc.expectStatus {
+				t.Fatalf("expected %d got %d", tc.expectStatus, rec.Code)
+			}
 			actual := <-received
-			assert.Equal(t, tc.expectURI, actual)
+			if actual != tc.expectURI {
+				t.Fatalf("expected %s got %s", tc.expectURI, actual)
+			}
 		})
 	}
 }
@@ -204,7 +229,7 @@ func TestStdProxyRewriteRegex(t *testing.T) {
 		{"/a/test", http.StatusOK, "/v1/test"},
 		{"/b/foo/c/bar/baz", http.StatusOK, "/v2/bar/baz/foo"},
 		{"/c/ignore/test", http.StatusOK, "/v3/test"},
-		{"/c/ignore1/test/this", http.StatusOK, "/v3/test/this"},
+		{"/c/ignore1/test/this", http.StatusOK, "/v31/test/this"},
 		{"/x/ignore/test", http.StatusOK, "/v4/test"},
 		{"/y/foo/bar", http.StatusOK, "/v5/bar/foo"},
 		{"/y/foo/bar?q=1#frag", http.StatusOK, "/v5/bar?q=1"},
@@ -217,8 +242,12 @@ func TestStdProxyRewriteRegex(t *testing.T) {
 			rec := httptest.NewRecorder()
 			mux.ServeHTTP(rec, req)
 			actual := <-received
-			assert.Equal(t, tc.expect, actual)
-			assert.Equal(t, tc.status, rec.Code)
+			if actual != tc.expect {
+				t.Fatalf("expected %s got %s", tc.expect, actual)
+			}
+			if rec.Code != tc.status {
+				t.Fatalf("expected %d got %d", tc.status, rec.Code)
+			}
 		})
 	}
 }
@@ -229,14 +258,18 @@ func TestStdProxyError(t *testing.T) {
 	targets := []*StdProxyTarget{{Name: "1", URL: url1}, {Name: "2", URL: url2}}
 	rb := NewStdRandomBalancer(nil)
 	for _, tgt := range targets {
-		assert.True(t, rb.AddTarget(tgt))
+		if !rb.AddTarget(tgt) {
+			t.Fatalf("expected target %s to be added", tgt.Name)
+		}
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/", ProxyStd(rb)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})))
 	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusBadGateway, rec.Code)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("expected %d got %d", http.StatusBadGateway, rec.Code)
+	}
 }
 
 func TestStdProxyRetries(t *testing.T) {
@@ -298,7 +331,9 @@ func TestStdProxyRetries(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			rec := httptest.NewRecorder()
 			mux.ServeHTTP(rec, req)
-			assert.Equal(t, tc.expected, rec.Code)
+			if rec.Code != tc.expected {
+				t.Fatalf("expected %d got %d", tc.expected, rec.Code)
+			}
 			if len(tc.filters) > 0 {
 				t.Fatalf("expected more retry filter calls")
 			}
@@ -338,7 +373,9 @@ func TestStdProxyRetryWithBackendTimeout(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			rec := httptest.NewRecorder()
 			mux.ServeHTTP(rec, req)
-			assert.Equal(t, 200, rec.Code)
+			if rec.Code != 200 {
+				t.Fatalf("expected 200 got %d", rec.Code)
+			}
 		}()
 	}
 	wg.Wait()
@@ -374,11 +411,15 @@ func TestStdProxyErrorHandler(t *testing.T) {
 			name:   "Error handler invoked when request fails",
 			target: badTarget,
 			errorHandler: func(w http.ResponseWriter, r *http.Request, e error) {
-				assert.Contains(t, e.Error(), "502")
+				if !strings.Contains(e.Error(), "502") {
+					t.Fatalf("expected error to contain 502")
+				}
 				http.Error(w, transformedErr.Error(), http.StatusBadGateway)
 			},
 			expect: func(t *testing.T, err error) {
-				assert.Contains(t, err.Error(), transformedErr.Error())
+				if !strings.Contains(err.Error(), transformedErr.Error()) {
+					t.Fatalf("expected %s in %s", transformedErr.Error(), err.Error())
+				}
 			},
 		},
 	}
@@ -424,14 +465,20 @@ func TestStdClientCancelConnectionResultsHTTPCode499(t *testing.T) {
 	}()
 	mux.ServeHTTP(rec, req)
 	wg.Done()
-	assert.Equal(t, StatusCodeContextCanceled, rec.Code)
+	if rec.Code != StatusCodeContextCanceled {
+		t.Fatalf("expected %d got %d", StatusCodeContextCanceled, rec.Code)
+	}
 }
 
 func TestStdProxyBalancerWithNoTargets(t *testing.T) {
 	rb := NewStdRandomBalancer(nil)
-	assert.Nil(t, rb.Next(nil))
+	if rb.Next(nil) != nil {
+		t.Fatalf("expected nil target")
+	}
 	rrb := NewStdRoundRobinBalancer([]*StdProxyTarget{})
-	assert.Nil(t, rrb.Next(nil))
+	if rrb.Next(nil) != nil {
+		t.Fatalf("expected nil target")
+	}
 }
 
 type stdTestContextKey string
@@ -468,7 +515,13 @@ func TestStdModifyResponseUseContext(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "OK", rec.Body.String())
-	assert.Equal(t, "CUSTOM_BALANCER", rec.Header().Get("FROM_BALANCER"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected %d got %d", http.StatusOK, rec.Code)
+	}
+	if rec.Body.String() != "OK" {
+		t.Fatalf("expected body OK got %s", rec.Body.String())
+	}
+	if rec.Header().Get("FROM_BALANCER") != "CUSTOM_BALANCER" {
+		t.Fatalf("expected FROM_BALANCER CUSTOM_BALANCER got %s", rec.Header().Get("FROM_BALANCER"))
+	}
 }

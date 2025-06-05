@@ -14,6 +14,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -37,6 +38,11 @@ type StdProxyTarget struct {
 	Name string
 	URL  *url.URL
 	Meta map[string]interface{}
+}
+
+type rewriteRule struct {
+	re   *regexp.Regexp
+	repl string
 }
 
 type StdProxyBalancer interface {
@@ -67,6 +73,67 @@ type stdRoundRobinBalancer struct {
 var DefaultStdProxyConfig = StdProxyConfig{
 	Skipper:    func(*http.Request) bool { return false },
 	ContextKey: "target",
+}
+
+func captureTokens(pattern *regexp.Regexp, input string) *strings.Replacer {
+	groups := pattern.FindAllStringSubmatch(input, -1)
+	if groups == nil {
+		return nil
+	}
+	values := groups[0][1:]
+	replace := make([]string, 2*len(values))
+	for i, v := range values {
+		j := 2 * i
+		replace[j] = "$" + strconv.Itoa(i+1)
+		replace[j+1] = v
+	}
+	return strings.NewReplacer(replace...)
+}
+
+func rewriteRulesRegex(rewrite map[string]string) []rewriteRule {
+	rules := []rewriteRule{}
+	for k, v := range rewrite {
+		if strings.HasPrefix(k, "^") {
+			rules = append(rules, rewriteRule{regexp.MustCompile(k), v})
+			continue
+		}
+		k = regexp.QuoteMeta(k)
+		k = strings.ReplaceAll(k, "\\*", "(.*)")
+		rules = append(rules, rewriteRule{regexp.MustCompile("^" + k + "$"), v})
+	}
+	return rules
+}
+
+func rewriteURL(rules []rewriteRule, req *http.Request) error {
+	if len(rules) == 0 {
+		return nil
+	}
+
+	rawURI := req.RequestURI
+	if rawURI != "" && rawURI[0] != '/' {
+		prefix := ""
+		if req.URL.Scheme != "" {
+			prefix = req.URL.Scheme + "://"
+		}
+		if req.URL.Host != "" {
+			prefix += req.URL.Host
+		}
+		if prefix != "" {
+			rawURI = strings.TrimPrefix(rawURI, prefix)
+		}
+	}
+
+	for _, rule := range rules {
+		if replacer := captureTokens(rule.re, rawURI); replacer != nil {
+			url, err := req.URL.Parse(replacer.Replace(rule.repl))
+			if err != nil {
+				return err
+			}
+			req.URL = url
+			return nil
+		}
+	}
+	return nil
 }
 
 func stdProxyRaw(t *StdProxyTarget, w http.ResponseWriter, r *http.Request, config StdProxyConfig) error {
@@ -248,13 +315,14 @@ func ProxyStdWithConfig(config StdProxyConfig) func(http.Handler) http.Handler {
 			http.Error(w, http.StatusText(code), code)
 		}
 	}
+	var rewriteRules []rewriteRule
+	if config.RegexRewrite != nil {
+		for k, v := range config.RegexRewrite {
+			rewriteRules = append(rewriteRules, rewriteRule{k, v})
+		}
+	}
 	if config.Rewrite != nil {
-		if config.RegexRewrite == nil {
-			config.RegexRewrite = make(map[*regexp.Regexp]string)
-		}
-		for k, v := range rewriteRulesRegex(config.Rewrite) {
-			config.RegexRewrite[k] = v
-		}
+		rewriteRules = append(rewriteRules, rewriteRulesRegex(config.Rewrite)...)
 	}
 
 	provider, isTargetProvider := config.Balancer.(StdTargetProvider)
@@ -266,7 +334,7 @@ func ProxyStdWithConfig(config StdProxyConfig) func(http.Handler) http.Handler {
 				return
 			}
 
-			if err := rewriteURL(config.RegexRewrite, r); err != nil {
+			if err := rewriteURL(rewriteRules, r); err != nil {
 				config.ErrorHandler(w, r, err)
 				return
 			}
