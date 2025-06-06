@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/labstack/echo/v4"
+	echo "github.com/g-h-miles/std-middleware/echo"
 )
 
 // TODO: Handle TLS proxy
