@@ -58,7 +58,14 @@ func TestCSP(t *testing.T) {
 }
 
 func TestCORS(t *testing.T) {
-	h := CORSMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := CORSMiddleware(Options{
+		AllowedOrigins:   []string{"http://example.com"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"X-CSRF-Token"},
+		AllowCredentials: true,
+		Debug:            false,
+	})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
