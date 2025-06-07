@@ -1,3 +1,3 @@
 module github.com/g-h-miles/std-middleware
 
-go 1.24
+go 1.23
