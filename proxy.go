@@ -22,7 +22,7 @@ import (
 
 // StdProxyConfig defines configuration for the standard HTTP Proxy middleware.
 type StdProxyConfig struct {
-	Skipper        func(r *http.Request) bool
+	Skipper        Skipper
 	Balancer       StdProxyBalancer
 	RetryCount     int
 	RetryFilter    func(r *http.Request, err error) bool
@@ -75,7 +75,7 @@ type stdContextKey string
 const roundRobinLastIndexKey stdContextKey = "_round_robin_last_index"
 
 var DefaultStdProxyConfig = StdProxyConfig{
-	Skipper:    func(*http.Request) bool { return false },
+	Skipper:    DefaultSkipper,
 	ContextKey: stdContextKey("target"),
 }
 
