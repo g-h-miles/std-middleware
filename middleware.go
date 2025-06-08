@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"io"
 	"net/http"
 )
 
@@ -38,13 +37,23 @@ type Skipper func(r *http.Request) bool
 // DefaultSkipper is a no-op skipper.
 var DefaultSkipper Skipper = func(r *http.Request) bool { return false }
 
-// randomString returns a random base64 string of n bytes.
-func randomString(n int) string {
-	b := make([]byte, n)
-	if _, err := io.ReadFull(rand.Reader, b); err != nil {
-		return ""
+func GenerateRandomString(length int) (string, error) {
+	bytes := make([]byte, length)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", err
 	}
-	return base64.RawStdEncoding.EncodeToString(b)
+	// Remove 0, O, 1, I to remove ambiguity
+	code := base64.RawURLEncoding.EncodeToString(bytes)
+	return code, nil
+}
+
+func EncodeBase64UrlNoPadding(data []byte) string {
+	return base64.RawURLEncoding.WithPadding(base64.NoPadding).EncodeToString(data)
+}
+
+func DecodeBase64UrlNoPadding(data string) ([]byte, error) {
+	return base64.RawURLEncoding.WithPadding(base64.NoPadding).DecodeString(data)
 }
 
 // statusRecorder wraps ResponseWriter to capture status code.

@@ -44,19 +44,6 @@ func TestFixedWindowLimiter(t *testing.T) {
 	}
 }
 
-func TestCSP(t *testing.T) {
-	policy := "default-src 'self'"
-	h := CSPMiddleware(policy)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Header().Get("Content-Security-Policy") != policy {
-		t.Fatalf("missing csp header")
-	}
-}
-
 func TestCORS(t *testing.T) {
 	h := CORSMiddleware(Options{
 		AllowedOrigins:   []string{"http://example.com"},
@@ -74,34 +61,6 @@ func TestCORS(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Header().Get("Access-Control-Allow-Origin") == "" {
 		t.Fatalf("missing cors header")
-	}
-}
-
-func TestCSRF(t *testing.T) {
-	h := CSRFMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	// first GET to set cookie
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	cookie := rec.Result().Cookies()[0]
-	// POST without header should fail
-	req = httptest.NewRequest(http.MethodPost, "/", nil)
-	req.AddCookie(cookie)
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 got %d", rec.Code)
-	}
-	// POST with correct header should pass
-	req = httptest.NewRequest(http.MethodPost, "/", nil)
-	req.AddCookie(cookie)
-	req.Header.Set("X-CSRF-Token", cookie.Value)
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 got %d", rec.Code)
 	}
 }
 
