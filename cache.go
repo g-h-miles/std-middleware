@@ -10,26 +10,25 @@ import (
 	"time"
 )
 
-// ShardedCache interface remains the same
 type ShardedCache interface {
 	Put(key string, value interface{})
 	Get(key string) (interface{}, bool)
 	Delete(key string)
 }
 
-// shardedItem: lastAccess stores Unix timestamp in MILLISECONDS
+// shardedItem holds a cached value and the time it was last accessed.
+// lastAccess is stored as a Unix timestamp in milliseconds.
 type shardedItem struct {
 	value      interface{}
-	lastAccess int64 // Unix timestamp in MILLISECONDS
+	lastAccess int64
 }
 
-// shard remains the same
 type shard struct {
 	m  map[string]*shardedItem
 	mu sync.RWMutex
 }
 
-// ShardedTTLMap: maxTTLDuration is time.Duration
+// ShardedTTLMap is a time-aware sharded cache.
 type ShardedTTLMap struct {
 	shards           []*shard
 	numShards        uint32
@@ -40,7 +39,6 @@ type ShardedTTLMap struct {
 	warningThreshold int
 }
 
-// NewShardedTTLMap remains the same
 func NewShardedTTLMap(initialCapacity int, maxTTL time.Duration, name string) (*ShardedTTLMap, error) {
 	if initialCapacity <= 0 {
 		initialCapacity = 1000
@@ -80,7 +78,6 @@ func NewShardedTTLMap(initialCapacity int, maxTTL time.Duration, name string) (*
 	return m, nil
 }
 
-// getShard remains the same
 func (m *ShardedTTLMap) getShard(key string) *shard {
 	h := fnv.New32a()
 	h.Write([]byte(key))
@@ -88,33 +85,28 @@ func (m *ShardedTTLMap) getShard(key string) *shard {
 	return m.shards[shardID]
 }
 
-// Put: Store lastAccess in MILLISECONDS. Does NOT update lastAccess on existing keys.
+// Put stores a key/value pair without updating lastAccess for existing keys.
 func (m *ShardedTTLMap) Put(k string, v interface{}) {
 	s := m.getShard(k)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	it, ok := s.m[k]
-	if !ok { // If item does NOT exist, create it and set its creation time
-		it = &shardedItem{
-			value:      v,
-			lastAccess: time.Now().UnixMilli(), // Set creation time in MILLISECONDS
-		}
+	if !ok {
+		it = &shardedItem{value: v, lastAccess: time.Now().UnixMilli()}
 		s.m[k] = it
-	} else { // If item EXISTS, just update its value (DO NOT update lastAccess)
+	} else {
 		it.value = v
 	}
 }
 
-// Get: Compare using MILLISECONDS
+// Get retrieves a value if it has not expired.
 func (m *ShardedTTLMap) Get(k string) (interface{}, bool) {
 	s := m.getShard(k)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if it, ok := s.m[k]; ok {
-		// Compare current time in MILLISECONDS with lastAccess in MILLISECONDS
-		// and maxTTLDuration in MILLISECONDS.
 		if time.Now().UnixMilli()-it.lastAccess < m.maxTTLDuration.Milliseconds() {
 			return it.value, true
 		}
@@ -122,7 +114,6 @@ func (m *ShardedTTLMap) Get(k string) (interface{}, bool) {
 	return nil, false
 }
 
-// Delete remains the same
 func (m *ShardedTTLMap) Delete(k string) {
 	s := m.getShard(k)
 	s.mu.Lock()
@@ -130,14 +121,14 @@ func (m *ShardedTTLMap) Delete(k string) {
 	delete(s.m, k)
 }
 
-// cleanupLoop: Compare using MILLISECONDS
+// cleanupLoop periodically removes expired items.
 func (m *ShardedTTLMap) cleanupLoop() {
 	ticker := time.NewTicker(m.cleanupFrequency)
 	defer ticker.Stop()
 
 	for now := range ticker.C {
-		nowMilli := now.UnixMilli()                    // Get current time in MILLISECONDS
-		maxTTLMilli := m.maxTTLDuration.Milliseconds() // Get TTL in MILLISECONDS
+		nowMilli := now.UnixMilli()
+		maxTTLMilli := m.maxTTLDuration.Milliseconds()
 
 		for _, s := range m.shards {
 			s.mu.Lock()
@@ -151,7 +142,6 @@ func (m *ShardedTTLMap) cleanupLoop() {
 	}
 }
 
-// warningLoop remains the same
 func (m *ShardedTTLMap) warningLoop() {
 	ticker := time.NewTicker(time.Hour * 24)
 	defer ticker.Stop()

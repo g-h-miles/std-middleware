@@ -297,6 +297,15 @@ func ProxyStd(balancer StdProxyBalancer) func(http.Handler) http.Handler {
 	return ProxyStdWithConfig(c)
 }
 
+// Proxy provides a Middleware variant of ProxyStd.
+func Proxy(balancer StdProxyBalancer) Middleware {
+	std := ProxyStd(balancer)
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		handler := std(next)
+		return handler.ServeHTTP
+	}
+}
+
 func ProxyStdWithConfig(config StdProxyConfig) func(http.Handler) http.Handler {
 	if config.Balancer == nil {
 		panic("proxy middleware requires balancer")
@@ -394,5 +403,14 @@ func ProxyStdWithConfig(config StdProxyConfig) func(http.Handler) http.Handler {
 				retries--
 			}
 		})
+	}
+}
+
+// ProxyWithConfig wraps ProxyStdWithConfig as Middleware.
+func ProxyWithConfig(config StdProxyConfig) Middleware {
+	std := ProxyStdWithConfig(config)
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		handler := std(next)
+		return handler.ServeHTTP
 	}
 }

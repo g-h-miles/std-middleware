@@ -530,3 +530,35 @@ func TestStdModifyResponseUseContext(t *testing.T) {
 		t.Fatalf("expected FROM_BALANCER CUSTOM_BALANCER got %s", rec.Header().Get("FROM_BALANCER"))
 	}
 }
+
+func TestProxyMiddleware(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "ok")
+	}))
+	defer srv.Close()
+	u, _ := url.Parse(srv.URL)
+	bal := NewStdRandomBalancer([]*StdProxyTarget{{Name: "t", URL: u}})
+	h := Proxy(bal)(func(w http.ResponseWriter, r *http.Request) {})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Body.String() != "ok" {
+		t.Fatalf("expected ok got %s", rec.Body.String())
+	}
+}
+
+func TestProxyMiddlewareWithConfig(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "ok")
+	}))
+	defer srv.Close()
+	u, _ := url.Parse(srv.URL)
+	cfg := StdProxyConfig{Balancer: NewStdRoundRobinBalancer([]*StdProxyTarget{{Name: "t", URL: u}})}
+	h := ProxyWithConfig(cfg)(func(w http.ResponseWriter, r *http.Request) {})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Body.String() != "ok" {
+		t.Fatalf("expected ok got %s", rec.Body.String())
+	}
+}

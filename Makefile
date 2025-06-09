@@ -1,12 +1,4 @@
-.PHONY: build run test clean dev
-
-# Build the application
-build:
-	go build -o bin/server ./cmd/server
-
-# Run the test server
-run:
-	go run ./cmd/server
+.PHONY: test clean deps fmt vet
 
 # Run tests
 test:
@@ -16,9 +8,6 @@ test:
 clean:
 	rm -rf bin/
 
-# Development mode with air hot reload
-dev:
-	air
 
 # Install dependencies
 deps:

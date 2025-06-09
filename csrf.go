@@ -54,14 +54,12 @@ func (cfg *CSRFConfig) Middleware() Middleware {
 				return
 			}
 
-			// ===== CSRF COOKIE ======
 			csrfCookie, err := r.Cookie(cfg.CookieName)
 			if err != nil || csrfCookie.Value == "" {
 				http.Error(w, "CSRF token required", http.StatusForbidden)
 				return
 			}
 
-			// ===== CSRF HEADER ======
 			csrfHeaders := r.Header[cfg.HeaderName]
 			var csrfHeader string
 
@@ -76,7 +74,6 @@ func (cfg *CSRFConfig) Middleware() Middleware {
 			}
 
 			if cfg.UseSession {
-				// ===== SESSION COOKIE ======
 				sessionCookie, err := r.Cookie(cfg.SessionCookieName)
 				if err != nil {
 					http.Error(w, "Invalid session", http.StatusUnauthorized)
@@ -87,7 +84,6 @@ func (cfg *CSRFConfig) Middleware() Middleware {
 					return
 				}
 
-				// ===== VERIFY TOKEN ======
 				verified, err := cfg.verifyCSRFToken(csrfHeader, sessionCookie.Value, csrfCookie.Value)
 				if err != nil {
 					http.Error(w, "Invalid CSRF token", http.StatusForbidden)
@@ -98,7 +94,6 @@ func (cfg *CSRFConfig) Middleware() Middleware {
 					return
 				}
 			} else {
-				// ===== SIMPLE COMPARISON ======
 				if csrfCookie.Value != csrfHeader {
 					http.Error(w, "Invalid CSRF token", http.StatusForbidden)
 					return

@@ -8,8 +8,7 @@ import (
 	"time"
 )
 
-// --- Token Bucket Rate Limiter (No Changes) ---
-type TokenBucketCache struct {
+type tokenBucketCache struct {
 	count      int
 	lastRefill int64
 }
@@ -48,14 +47,14 @@ func (tb *TokenBucketRateLimiter) IsAllowed(key string) bool {
 	currentTime := time.Now().UnixMilli()
 
 	bucketIface, ok := tb.cache.Get(cacheKey)
-	var bucket *TokenBucketCache
+	var bucket *tokenBucketCache
 	if !ok {
-		bucket = &TokenBucketCache{
+		bucket = &tokenBucketCache{
 			count:      tb.bucketCapacity,
 			lastRefill: currentTime,
 		}
 	} else {
-		bucket = bucketIface.(*TokenBucketCache)
+		bucket = bucketIface.(*tokenBucketCache)
 	}
 
 	elapsedTimeMs := currentTime - bucket.lastRefill
@@ -69,7 +68,7 @@ func (tb *TokenBucketRateLimiter) IsAllowed(key string) bool {
 		tokenCount--
 	}
 
-	tb.cache.Put(cacheKey, &TokenBucketCache{
+	tb.cache.Put(cacheKey, &tokenBucketCache{
 		count:      tokenCount,
 		lastRefill: currentTime,
 	})
@@ -100,10 +99,7 @@ func TokenBucketMiddleware(limiter *TokenBucketRateLimiter, errorMsg string, sta
 	}
 }
 
-// --- Fixed Window Rate Limiter (CRITICAL FIXES HERE) ---
-
-// FixedWindowCache: No change required
-type FixedWindowCache struct {
+type fixedWindowCache struct {
 	count int
 }
 
@@ -141,23 +137,19 @@ func NewFixedWindowRateLimiter(identifier string, limit int, windowSize time.Dur
 	}, nil
 }
 
-// IsAllowed: The CRITICAL FIX for Fixed Window logic.
-// It relies on ShardedTTLMap correctly expiring and returning !ok when the window's time is up.
-// The key is to generate a window-specific key, and the TTLMap's Put/Get logic handles the rest.
+// IsAllowed checks if a request is within the current window's limit.
 func (fw *FixedWindowRateLimiter) IsAllowed(key string) bool {
-	// Calculate the current window ID based on the precise window start time.
-	// Use UnixMilli() for current time and windowSize.Milliseconds() for window duration
-	// to ensure precise window boundaries, even for sub-second windows.
+	// Calculate the current window ID using the window duration in milliseconds.
 	windowID := time.Now().UnixMilli() / fw.windowSize.Milliseconds()
 	currentWindowCacheKey := fmt.Sprintf("%s%s:%d", fw.cachePrefix, key, windowID)
 
 	bucketIface, ok := fw.cache.Get(currentWindowCacheKey)
-	var bucket *FixedWindowCache
+	var bucket *fixedWindowCache
 
 	if !ok {
 		// This means we are in a new window for this key (or the key never existed).
 		// Initialize a new counter for this window.
-		bucket = &FixedWindowCache{
+		bucket = &fixedWindowCache{
 			count: 0,
 		}
 		// ShardedTTLMap.Put will set its internal `lastAccess` to `time.Now().UnixMilli()`
@@ -165,7 +157,7 @@ func (fw *FixedWindowRateLimiter) IsAllowed(key string) bool {
 		// This is exactly what we want for a fixed window - its life is tied to its creation.
 	} else {
 		// We are within an existing window for this key.
-		bucket = bucketIface.(*FixedWindowCache)
+		bucket = bucketIface.(*fixedWindowCache)
 	}
 
 	isAllowed := bucket.count < fw.limit
