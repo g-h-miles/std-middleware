@@ -11,9 +11,10 @@ import (
 )
 
 func TestTokenBucketLimiter(t *testing.T) {
-	h := TokenBucketLimiter(1, time.Hour)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	tb, _ := NewTokenBucketRateLimiter("test", 1, 1)
+	h := TokenBucketMiddleware(tb, "Too Many Requests", http.StatusTooManyRequests)(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-	}))
+	})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -28,9 +29,10 @@ func TestTokenBucketLimiter(t *testing.T) {
 }
 
 func TestFixedWindowLimiter(t *testing.T) {
-	h := FixedWindowLimiter(1, time.Hour)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fw, _ := NewFixedWindowRateLimiter("test", 1, time.Hour)
+	h := FixedWindowMiddleware(fw, "Too Many Requests", http.StatusTooManyRequests)(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-	}))
+	})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
