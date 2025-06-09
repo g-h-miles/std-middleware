@@ -6,10 +6,7 @@ A Go middleware package for standard HTTP request/response handling.
 
 ```
 std-middleware/
-├── cmd/
-│   └── server/          # Test HTTP server
-│       └── main.go
-├── .air.toml           # Air hot reload configuration
+├── .air.toml           # Air hot reload configuration (optional)
 ├── Makefile            # Build and development tasks
 ├── go.mod              # Go module file
 └── README.md
@@ -24,36 +21,14 @@ std-middleware/
 
 ### Development
 
-1. **Run in development mode with hot reload:**
+Run the tests to ensure everything works:
 
-   ```bash
-   make dev
-   ```
-
-2. **Run the test server:**
-
-   ```bash
-   make run
-   ```
-
-3. **Build the application:**
-   ```bash
-   make build
-   ```
-
-### Testing the Server
-
-Once the server is running, you can test the endpoints:
-
-- **Root endpoint:** `curl http://localhost:8080/`
-- **Hello endpoint:** `curl http://localhost:8080/hello`
-- **Health endpoint:** `curl http://localhost:8080/health`
+```bash
+make test
+```
 
 ### Available Make Commands
 
-- `make build` - Build the application
-- `make run` - Run the test server
-- `make dev` - Run with hot reload (requires Air)
 - `make test` - Run tests
 - `make clean` - Clean build artifacts
 - `make deps` - Install and tidy dependencies
@@ -62,7 +37,7 @@ Once the server is running, you can test the endpoints:
 
 ## Middleware Examples
 
-The test server includes example middleware:
+Example middleware:
 
 - **LoggingMiddleware** - Logs request details and timing
 - **CORSMiddleware** - Adds CORS headers for cross-origin requests
