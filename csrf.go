@@ -25,7 +25,7 @@ type CSRFConfig struct {
 	validationErr error
 }
 
-func defaultSkipper(r *http.Request) bool {
+func defaultCSRFSkipper(r *http.Request) bool {
 	return r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions
 }
 
@@ -40,7 +40,7 @@ func DefaultCSRFConfig() *CSRFConfig {
 		Secure:            false,
 		SameSite:          http.SameSiteLaxMode,
 		MaxAge:            3600 * time.Second,
-		Skipper:           defaultSkipper,
+		Skipper:           defaultCSRFSkipper,
 	}
 }
 

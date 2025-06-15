@@ -202,7 +202,6 @@ func TestShardedTTLMap_WarningThreshold(t *testing.T) {
 	// now := time.Now()
 	// Simulate the warningLoop logic
 	totalCount := 0
-	shardWarnings := make([]string, 0)
 	var anyShardAboveThreshold bool
 
 	for i, s := range cache.shards {
@@ -211,7 +210,7 @@ func TestShardedTTLMap_WarningThreshold(t *testing.T) {
 		s.mu.RUnlock()
 		totalCount += count
 		if count > cache.warningThreshold {
-			shardWarnings = append(shardWarnings, fmt.Sprintf("shard %d (%d items)", i, count))
+			t.Logf("shard %d (%d items)", i, count)
 			anyShardAboveThreshold = true
 		}
 	}
